@@ -14,27 +14,53 @@ const Dashboard = () => {
   });
   
   const engineRef = useRef(null);
+  const wakeLockRef = useRef(null);
+
+  const requestWakeLock = async () => {
+    try {
+      if ('wakeLock' in navigator) {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      }
+    } catch (err) {
+      console.error(`Wake Lock error: ${err.name}, ${err.message}`);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLockRef.current !== null) {
+      await wakeLockRef.current.release().catch(() => {});
+      wakeLockRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      releaseWakeLock();
+    };
+  }, []);
+
 
   const startTest = () => {
     setTestState('RUNNING');
     setMetrics({ ping: 0, download: 0, upload: 0, gaugeValue: 0, phase: 'PING' });
+    requestWakeLock();
     
-    // Instantiate actual Cloudflare engine with a minimum 1 hour (3600000ms) duration threshold
+    // Instantiate actual Cloudflare engine with a up to 10 hours (36000000ms) duration threshold
     const engine = new SpeedTest({ 
       autoStart: true,
-      bandwidthFinishRequestDuration: 3600000, // 1 hour completely disables early abort
+      bandwidthFinishRequestDuration: 36000000, // 10 hours completely disables early abort
       measurements: [
         { type: 'latency', numPackets: 20 },
         { type: 'download', bytes: 1e5, count: 5 },
         { type: 'download', bytes: 1e6, count: 5 },
         { type: 'download', bytes: 1e7, count: 10 },
         { type: 'download', bytes: 2.5e7, count: 10 },
-        { type: 'download', bytes: 1e8, count: 1000 }, 
+        { type: 'download', bytes: 1e8, count: 100000 }, 
         { type: 'upload', bytes: 1e5, count: 5 },
         { type: 'upload', bytes: 1e6, count: 5 },
         { type: 'upload', bytes: 1e7, count: 10 },
         { type: 'upload', bytes: 2.5e7, count: 10 },
-        { type: 'upload', bytes: 5e7, count: 1000 } 
+        { type: 'upload', bytes: 5e7, count: 100000 } 
       ]
     });
 
@@ -93,6 +119,7 @@ const Dashboard = () => {
         phase: 'DONE'
       });
       setTestState('DONE');
+      releaseWakeLock();
     };
     
     if (typeof engine.play === 'function') {
@@ -114,6 +141,7 @@ const Dashboard = () => {
       phase: 'DONE'
     }));
     setTestState('DONE');
+    releaseWakeLock();
   };
 
   const getStatusText = () => {
