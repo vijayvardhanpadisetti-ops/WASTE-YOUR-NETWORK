@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Gauge from './Gauge';
 import ResultsDisplay from './ResultsDisplay';
 import SpeedTest from '@cloudflare/speedtest';
+import NoSleep from 'nosleep.js';
 
 const Dashboard = () => {
   const [testState, setTestState] = useState('IDLE'); // IDLE, RUNNING, DONE
@@ -14,24 +15,41 @@ const Dashboard = () => {
   });
   
   const engineRef = useRef(null);
-  const wakeLockRef = useRef(null);
+  const noSleepRef = useRef(new NoSleep());
 
-  const requestWakeLock = async () => {
+  const requestWakeLock = () => {
     try {
-      if ('wakeLock' in navigator) {
-        wakeLockRef.current = await navigator.wakeLock.request('screen');
+      if (!noSleepRef.current.isEnabled) {
+        noSleepRef.current.enable();
       }
     } catch (err) {
-      console.error(`Wake Lock error: ${err.name}, ${err.message}`);
+      console.error(`NoSleep enable error: ${err.message}`);
     }
   };
 
-  const releaseWakeLock = async () => {
-    if (wakeLockRef.current !== null) {
-      await wakeLockRef.current.release().catch(() => {});
-      wakeLockRef.current = null;
+  const releaseWakeLock = () => {
+    try {
+      if (noSleepRef.current.isEnabled) {
+        noSleepRef.current.disable();
+      }
+    } catch (err) {
+      console.error(`NoSleep disable error: ${err.message}`);
     }
   };
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      // Re-enable if the user returns to the tab while test is running
+      if (document.visibilityState === 'visible' && testState === 'RUNNING') {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [testState]);
 
   useEffect(() => {
     return () => {
